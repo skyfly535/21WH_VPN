@@ -1,0 +1,74 @@
+---
+- name: VPN
+  #Указываем имя хоста или группу, которые будем настраивать
+  hosts: all
+  #Параметр выполнения модулей от root-пользователя
+  become: yes
+
+  tasks:
+  # Установка epel-release
+  - name: install epel-release on CentOS
+    ansible.builtin.yum:
+      name: epel-release
+      state: present
+  # Установка пакета openvpn   
+  - name: install softs on CentOS
+    ansible.builtin.yum:
+      name:
+        - nano
+        - openvpn
+        - iperf3
+      state: present
+
+  # Отключаем SELinux
+  - name: Disable SELinux
+    selinux:
+      state: disabled
+
+  - name: conf server vpn # выполняем на сервере
+    block:  
+      # Создаём файл-ключ
+      - name: openvpn genkey
+        shell: openvpn --genkey --secret /etc/openvpn/static.key
+
+      # Петреносим файл-ключ на хост
+      - name: fetch static.key openvpn
+        fetch:
+          src: /etc/openvpn/static.key
+          dest: /home/roman/project/static.key
+
+      # Копируем файл server.conf с хостовой машины 
+      - name: copy server.conf server 
+        template:
+          src: server.conf
+          dest: /etc/openvpn/server.conf
+    when: (ansible_hostname == "server")
+
+
+  - name: conf client vpn # выполняем на клиенте
+    block:
+      # Копируем файл server1.conf с хостовой машины  
+      - name: copy server.conf client
+        template:
+          src: server1.conf
+          dest: /etc/openvpn/server.conf
+      
+      # Копируем файл-ключ сгенерированной на сервере с хостовой машины
+      - name: copy static.key to client
+        template:
+          src: /home/roman/project/static.key/server/etc/openvpn/static.key
+          dest: /etc/openvpn/static.key
+    when: (ansible_hostname == "client")   
+
+  # service unit для запуска openvpn
+  - name: service unit openvpn 
+    template:
+      src: openvpn@.service
+      dest: /etc/systemd/system/openvpn@.service
+    
+  # Запускаем openvpn@server и добавляем его в автозагрузку 
+  - name: start openvpn@server
+    service:
+      name: openvpn@server
+      state: started
+      enabled: true
