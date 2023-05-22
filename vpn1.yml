@@ -1,0 +1,68 @@
+---
+- name: VPN
+  #Указываем имя хоста или группу, которые будем настраивать
+  hosts: all
+  #Параметр выполнения модулей от root-пользователя
+  become: yes
+
+  tasks:
+  # Установка epel-release
+  - name: install epel-release on CentOS
+    ansible.builtin.yum:
+      name: epel-release
+      state: present
+
+  # Установка пакета openvpn   
+  - name: install softs on CentOS
+    ansible.builtin.yum:
+      name:
+        - nano
+        - openvpn
+        - easy-rsa
+      state: present
+
+  # Отключаем SELinux
+  - name: Disable SELinux
+    selinux:
+      state: disabled
+
+  # Копируем файл server.conf с хостовой машины
+  - name: copy server.conf client
+    template:
+      src: server2.conf
+      dest: /etc/openvpn/server.conf
+
+  # Выполняем скрипт (инициализируем pki, сгенерируем необходимые ключи и сертификаты для сервера, сгенерируем сертификаты для клиента)
+  - name: Execute the script 
+    script: /home/roman/project/vpn.sh
+
+  # Скопируем файлы сертификатов и ключ для клиента на хост-машину.
+  - name: copy ca.crt to host
+    fetch:
+      src: /etc/openvpn/pki/ca.crt
+      dest: /home/roman/project/ca.crt 
+
+  # Скопируем файлы сертификатов и ключ для клиента на хост-машину.
+  - name: copy client.crt to host
+    fetch:
+      src: /etc/openvpn/pki/issued/client.crt 
+      dest: /home/roman/project/client.crt
+
+  # Скопируем файлы сертификатов и ключ для клиента на хост-машину.
+  - name: copy client.key to host
+    fetch:
+      src: /etc/openvpn/pki/private/client.key
+      dest: /home/roman/project/client.key
+
+  # service unit для запуска openvpn
+  - name: service unit openvpn 
+    template:
+      src: openvpn@.service
+      dest: /etc/systemd/system/openvpn@.service
+
+  # Запускаем openvpn@server и добавляем его в автозагрузку
+  - name: start openvpn@server
+    service:
+      name: openvpn@server
+      state: started
+      enabled: true
